@@ -1,0 +1,47 @@
+---
+
+- block:
+  - ansible.builtin.set_fact:
+      container_output: {}
+      issue_url: ""
+
+  - name: Log into DockerHub
+    community.docker.docker_login:
+      username: ptomasextorange
+      password: "{{ demo_dockerhub_token }}"
+    notify: Log out of DockerHub
+
+  - name: Pull the private image from DockerHub
+    community.docker.docker_image_pull:
+      name: ptomasextorange/html2md
+
+  - name: Create a container from the pulled image
+    community.docker.docker_container:
+      name: my_html2md_container
+      image: ptomasextorange/html2md
+      detach: false
+    register: container_output
+
+  - name: Open an issue into the main repository
+    ansible.builtin.include_tasks: "{{ playbook_dir }}/tasks/git-hoster/issue/create.yml"
+    vars:
+      issue_repo: "{{ repo_main }}"
+      issue_title: 'I found an awesome Wikipedia page to share with you'
+      request_bearer: "{{ secrets_token }}"
+  - name: Comment the newly opened issue with the registered content
+    ansible.builtin.include_tasks: "{{ playbook_dir }}/tasks/git-hoster/issue/comment.yml"
+    vars:
+      issue_repo: "{{ repo_main }}"
+      issue_number: "{{ githoster_create_issue_response.json.number }}"
+      issue_body: "{{ item }}"
+      request_bearer: "{{ secrets_token }}"
+    loop: "{{ container_output.container.Output | batch(32768) | map('join', '') | list }}"
+  rescue:
+    - ansible.builtin.include_tasks: "{{ playbook_dir }}/tests/secrets/pre/cleanup.yml"
+    - ansible.builtin.include_tasks: "{{ playbook_dir }}/tasks/secrets/cleanup.yml"
+    - ansible.builtin.include_tasks: "{{ playbook_dir }}/tests/secrets/post/cleanup.yml"
+    - ansible.builtin.fail:
+        msg: "A previous rescued task failed"
+- ansible.builtin.include_tasks: "{{ playbook_dir }}/tests/secrets/pre/cleanup.yml"
+- ansible.builtin.include_tasks: "{{ playbook_dir }}/tasks/secrets/cleanup.yml"
+- ansible.builtin.include_tasks: "{{ playbook_dir }}/tests/secrets/post/cleanup.yml"
