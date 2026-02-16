@@ -1,0 +1,5 @@
+---
+
+collections:
+- name: community.general # needed for password-store lookup
+- name: community.docker  # needed for demo role
